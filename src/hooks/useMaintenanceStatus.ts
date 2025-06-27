@@ -14,6 +14,7 @@ interface MaintenanceConfig {
 
 interface MaintenanceStatus {
   isMaintenanceMode: boolean;
+  isAdminBypass: boolean;
   config: MaintenanceConfig | null;
   loading: boolean;
   error: string | null;

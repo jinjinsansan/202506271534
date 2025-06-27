@@ -1,82 +1,73 @@
 import { supabase } from './supabase';
 
-// Boltが作成したテストデータを削除する関数
-export const cleanupTestData = async (): Promise<{ 
-  localRemoved: number, 
-  supabaseRemoved: number,
-  success: boolean 
-}> => {
-  console.log('テストデータのクリーンアップを開始します...');
-  
+/**
+ * Boltが作成したテストデータを削除する関数
+ * 実際のユーザーデータは保持する
+ */
+export const cleanupTestData = async () => {
   try {
-    // 1. ローカルストレージからデータを取得
-    const localEntriesStr = localStorage.getItem('journalEntries');
-    if (!localEntriesStr) {
-      console.log('ローカルデータが見つかりません');
-      return { localRemoved: 0, supabaseRemoved: 0, success: true };
+    let localRemoved = 0;
+    let supabaseRemoved = 0;
+    
+    // ローカルストレージからテストデータを削除
+    const savedEntries = localStorage.getItem('journalEntries');
+    if (savedEntries) {
+      const entries = JSON.parse(savedEntries);
+      
+      // テストデータの特徴を持つエントリーを識別
+      // (例: Boltが生成したデータは特定のパターンを持つ)
+      const realEntries = entries.filter((entry: any) => {
+        // テストデータの特徴:
+        // 1. 特定の期間内に作成された
+        // 2. 特定のパターンの内容を持つ
+        const isTestData = 
+          (entry.event && entry.event.includes('テストデータ')) ||
+          (entry.realization && entry.realization.includes('テスト')) ||
+          (entry.event && entry.event.includes('サンプル')) ||
+          (entry.event && entry.event.length < 10 && entry.realization && entry.realization.length < 10);
+        
+        if (isTestData) {
+          localRemoved++;
+          return false;
+        }
+        return true;
+      });
+      
+      // 実際のユーザーデータのみを保存
+      localStorage.setItem('journalEntries', JSON.stringify(realEntries));
     }
     
-    const localEntries = JSON.parse(localEntriesStr);
-    console.log(`ローカルデータ: ${localEntries.length}件`);
-    
-    // 2. 実際のユーザーデータを特定
-    // ユーザー名を取得
-    const lineUsername = localStorage.getItem('line-username');
-    
-    // 3. テストデータを除外
-    // テストデータの特徴:
-    // - 実際のユーザーが書いていないデータ
-    // - Boltが生成したテストデータ
-    const realUserData = localEntries.filter((entry: any) => {
-      // 実際のユーザーデータの条件
-      const isRealUserData = 
-        // 実際のユーザーが書いたデータ（ユーザー名が一致）
-        (entry.user && entry.user.line_username === lineUsername) ||
-        // ユーザーフィールドがないが、ユーザーが手動で入力したデータ
-        (!entry.user && !entry.source);
-      
-      return isRealUserData;
-    });
-    
-    console.log(`実際のユーザーデータ: ${realUserData.length}件`);
-    console.log(`削除対象のテストデータ: ${localEntries.length - realUserData.length}件`);
-    
-    // 4. 実際のユーザーデータのみを保存
-    localStorage.setItem('journalEntries', JSON.stringify(realUserData));
-    
-    // 5. Supabaseからもテストデータを削除（接続されている場合のみ）
-    let supabaseRemoved = 0;
+    // Supabaseからテストデータを削除（接続されている場合のみ）
     if (supabase) {
       try {
-        // 現在のユーザーIDを取得
-        const userId = localStorage.getItem('supabase_user_id');
+        // テストデータの特徴を持つエントリーを削除
+        const { data, error } = await supabase
+          .from('diary_entries')
+          .delete()
+          .or('event.ilike.%テストデータ%,event.ilike.%サンプル%,realization.ilike.%テスト%')
+          .select();
         
-        if (userId) {
-          // 現在のユーザーのデータのみを残し、他のテストデータを削除
-          const { error } = await supabase
-            .from('diary_entries')
-            .delete()
-            .neq('user_id', userId);
-          
-          if (error) {
-            console.error('Supabaseデータ削除エラー:', error);
-          } else {
-            console.log('Supabaseからテストデータを削除しました');
-            supabaseRemoved = localEntries.length - realUserData.length;
-          }
+        if (error) {
+          console.error('Supabaseテストデータ削除エラー:', error);
+        } else if (data) {
+          supabaseRemoved = data.length;
         }
-      } catch (error) {
-        console.error('Supabase操作エラー:', error);
+      } catch (supabaseError) {
+        console.error('Supabase接続エラー:', supabaseError);
       }
     }
     
-    return { 
-      localRemoved: localEntries.length - realUserData.length, 
+    return {
+      localRemoved,
       supabaseRemoved,
       success: true
     };
   } catch (error) {
-    console.error('テストデータクリーンアップエラー:', error);
-    return { localRemoved: 0, supabaseRemoved: 0, success: false };
+    console.error('テストデータ削除エラー:', error);
+    return {
+      localRemoved: 0,
+      supabaseRemoved: 0,
+      success: false
+    };
   }
 };

@@ -78,19 +78,23 @@ export const useAutoSync = () => {
         
         user = await userService.createUser(lineUsername);
         
-        if (user) {
-          console.log('自動同期: ユーザーを作成しました:', user.id, new Date().toISOString());
-          setStatus(prev => ({ 
-            ...prev, 
-            userCreated: true, 
-            syncError: null,
-            syncInProgress: false
-          }));
-          
-          // ユーザー作成後、アプリの状態を更新
-          if (initializeUser) {
-            await initializeUser(lineUsername); 
-          }
+        if (!user || !user.id) {
+          console.error('ユーザー作成に失敗しました - nullが返されました', new Date().toISOString());
+          throw new Error('ユーザー作成に失敗しました。');
+        }
+
+        console.log('自動同期: ユーザーを作成しました:', user.id, new Date().toISOString());
+        localStorage.setItem('supabase_user_id', user.id);
+        setStatus(prev => ({ 
+          ...prev, 
+          userCreated: true, 
+          syncError: null,
+          syncInProgress: false
+        }));
+        
+        // ユーザー作成後、アプリの状態を更新
+        if (initializeUser) {
+          await initializeUser(lineUsername); 
         }
       } else {
         console.log('自動同期: ユーザーは既に存在します:', user.id, new Date().toISOString());
